@@ -1,31 +1,28 @@
 import tkinter as tk
-from parameter import Parameters
+from tkinter import messagebox
+import serial
+
+from parameter import Parameters,dSPIN_Registers_general,dSPIN_Registers_ro,dSPIN_Registers_pos,dSPIN_Registers_Voltage,dSPIN_Registers_Current
+from command import Commands
+from protocol import Protocol
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
         # 1. Configure the main application window
-        self.title("Two-Pane Layout Framework")
-        self.geometry("1424x720")
-        self.minsize(1024, 720)
-
-        # 2. Configure the grid for the main window
-        # weight=1 allows the columns/rows to expand when the window is resized
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1) # Left column
-        self.grid_columnconfigure(1, weight=1) # Right column
-
-        # 3. Initialize the Left Frame
-        # Background colors are added temporarily to make the layout visible
-        self.left_frame = tk.Frame(self, bg="#e0f7fa")
-        self.left_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.title("Pump Unit Test")
+        self.geometry("1400x1000")
+        self.port_open = False
+        self.com_handle = None
+        self.protocol_handler = Protocol(None)
+    
+        # Initialize all the parameters and commands
 
         # 4. Initialize the Right Frame
         self.right_frame = tk.Frame(self, bg="#f1f8e9")
-        self.right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        self.right_frame.pack(fill="both")
 
-        # 5. Populate the frames with widgets
-        self.build_left_frame()
+        
         self.build_right_frame()
 
     def build_left_frame(self):
@@ -36,38 +33,118 @@ class App(tk.Tk):
             bg="#e0f7fa", 
             font=("Helvetica", 14, "bold")
         )
-        label.pack(pady=20)
+        label.pack(pady=0)
         
         # Example button
         btn = tk.Button(self.left_frame, text="Action 1")
         btn.pack(pady=10)
 
     def build_right_frame(self):
-        """Add widgets to the right frame."""
+        
+        # Create the top frame
+        self.top_frame = tk.Frame(self.right_frame)
+        self.top_frame.pack()
         label = tk.Label(
-            self.right_frame, 
+            self.top_frame, 
             text="Paramters", 
             bg="#f1f8e9", 
             font=("Helvetica", 14, "bold")
         )
-        label.pack(pady=4)
-        self.update_all_button = tk.Button(self.right_frame, text="UPDATE ALL", width=20,command=self.update_all_params)
-        self.update_all_button.pack(pady=4)
-        self.canvas = tk.Canvas(self.right_frame,  bg="white")
-        self.canvas.pack(side=tk.LEFT,fill='both',expand=True)
-        self.scrollbar = tk.Scrollbar(self.right_frame, orient=tk.VERTICAL, width=16, command=self.canvas.yview)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        scrollable_frame = tk.Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=scrollable_frame,anchor="nw")
+        #label.pack(pady=4)
+        self.com_port_txt = tk.Entry(self.top_frame,width = 25)
+        self.com_port_txt.grid(row=0,column=0,padx=2) 
+        self.open_com_port_button = tk.Button(self.top_frame,text="Open Port", width=10,command=self.open_com_port)
+        self.open_com_port_button.grid(row=0,column=1,padx=2) 
         
-        self.canvas.bind_all("<Button-4>", self._linux_scroll_up)
-        self.canvas.bind_all("<Button-5>", self._linux_scroll_down)
+        self.update_all_button = tk.Button(self.top_frame, text="Read all Parameters", width=20,
+                                           command=self.update_all_params)
+        self.update_all_button.grid(row=1,column=0, columnspan=2, pady=4)
+        
+        # This frame
+        self.parameter_frame = tk.Frame(self.right_frame)
+        self.parameter_frame.pack()
+        
+        
+        self.ro_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.ro_setup_frame.grid(row=0,column=0,padx=1)
+        l1 = tk.Label(
+            self.ro_setup_frame,
+            text="Read Only Parameters", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l1.grid(row=0,column=0,columnspan=3)
+        
+        self.parameters_ro = Parameters(self.ro_setup_frame,self.protocol_handler,dSPIN_Registers_ro,ro=True)
+        self.parameters_ro.render_parameters(2)
+
+        self.general_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.general_setup_frame.grid(row=0,column=1,padx=1,rowspan=4)
+        l2 = tk.Label(
+            self.general_setup_frame,
+            text="General Parameters", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l2.grid(row=0,column=0,columnspan=3)
+        self.parameters_g = Parameters(self.general_setup_frame,self.protocol_handler,dSPIN_Registers_general,ro=False)
+        self.parameters_g.render_parameters(2)
 
 
-        scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.parameters = Parameters(scrollable_frame)
-        self.parameters.render_parameters(2)
+        self.position_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.position_setup_frame.grid(row=1,column=0   ,padx=1)
+        l3 = tk.Label(
+            self.position_setup_frame,
+            text="Position Parameters", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l3.grid(row=1,column=0,columnspan=3)
+
+        self.parameters_pos = Parameters(self.position_setup_frame,self.protocol_handler,dSPIN_Registers_pos,ro=False)
+        self.parameters_pos.render_parameters(2)
+
+        # Voltage Config
+        self.voltage_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.voltage_setup_frame.grid(row=0,column=2   ,padx=1,rowspan=5)
+        l3 = tk.Label(
+            self.voltage_setup_frame,
+            text="Voltage Config Parameters", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l3.grid(row=0,column=0,columnspan=3)
+        self.parameters_v = Parameters(self.voltage_setup_frame,self.protocol_handler,dSPIN_Registers_Voltage,ro=False)
+        self.parameters_v.render_parameters(2)
+
+        # Current Config   
+        self.current_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.current_setup_frame.grid(row=0,column=3   ,padx=1,rowspan=5)
+        l4 = tk.Label(
+            self.current_setup_frame,
+            text="Current Config Parameters", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l4.grid(row=0,column=0,columnspan=3)
+        self.parameters_i = Parameters(self.current_setup_frame,self.protocol_handler,dSPIN_Registers_Current,ro=False)
+        self.parameters_i.render_parameters(2)
+
+
+        # Commands
+        self.command_setup_frame  = tk.Frame(self.parameter_frame,highlightbackground='black', highlightthickness=2)
+        self.command_setup_frame.grid(row=3,column=0   ,padx=1,rowspan=1)
+        l5 = tk.Label(
+            self.command_setup_frame,
+            text="Commands", 
+            bg="#f1f8e9", 
+            font=("Helvetica", 12, "bold")
+        )
+        l5.grid(row=0,column=0,columnspan=3)
+        self.commands = Commands(self.command_setup_frame,self.protocol_handler)
+        self.commands.render_commands(2)
+
+
         
     def _on_mousewheel(self, event):
         print(event)
@@ -80,7 +157,28 @@ class App(tk.Tk):
         self.canvas.yview_scroll(2,"units")
 
     def update_all_params(self):
-        pass        
+        if not self.port_open:
+            messagebox.showerror("Error", "Com Port not Open!")
+            return
+        try:
+            self.parameters_ro.read_all()
+            self.parameters_g.read_all()
+            self.parameters_pos.read_all()
+            self.parameters_i.read_all()
+            self.parameters_v.read_all()
+        except Exception as ex:
+            messagebox.showerror("Error", f'{ex}')
+        
+    def open_com_port(self):
+        if not self.port_open:
+            comm_str =  self.com_port_txt.get()
+            try:
+                self.com_handle = serial.Serial(comm_str, 19200,timeout=1)
+                if self.com_handle.is_open:
+                    self.port_open = True
+                    self.protocol_handler.ser_handle = self.com_handle
+            except Exception as ex:
+                messagebox.showerror("Error", f'{ex}')
 
 if __name__ == "__main__":
     # Instantiate and run the application
