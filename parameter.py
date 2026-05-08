@@ -1,6 +1,6 @@
 # Parameter class
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 # The parameter
 dSPIN_Registers_general = {
@@ -65,10 +65,11 @@ MOTOR_ID_2 = 1
 MOTOR_ID_3 = 2
 
 class Parameter:
-    def __init__(self,name,code,root_frame,ro):
+    def __init__(self,name,code,root_frame,ro,protocol_handler=None):
         self.name = name
         self.code = code
         self.ro = ro
+        self.protocol_handler = protocol_handler
         self.values = [0,0,0]
 
         self.ui_label= tk.Label(
@@ -90,10 +91,19 @@ class Parameter:
     def update_fn(self,MotorID):
         """ Write the parameters """
         print(f'Upating {self.name} for Motor {MotorID}')
+        value = self.motor_entries[MotorID].get()
+        mask = 1 << MotorID
+        if value:
+            try:
+              value = int(value,0)
+              print(f'Running  {self.name} for Motor {MotorID} with Value {value}')
+              self.protocol_handler.put_param(mask,self.code,value)
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid integer value for Motor {MotorID}.")
         
-    def read_all(self,protocol_handler):
+    def read_all(self):
         """ Read the parameter from  ALL the motor """
-        data_received = protocol_handler.get_param(0x07,self.code)
+        data_received = self.protocol_handler.get_param(0x07,self.code)
         if data_received is None:
             raise Exception("No data received from the Pump Unit")
         #p1 = [20,20,100]
@@ -113,7 +123,7 @@ class Parameters:
 
     def make_parameters(self):
         for name, value in self.parameter_dict.items():
-            self.all_parameters.append(Parameter(name,value,self.root_frame,self.ro))
+            self.all_parameters.append(Parameter(name,value,self.root_frame,self.ro,self.protocol_handler))
             #print(f"{name=}  {value=}")
         print("LEN ====", len(self.all_parameters))
     
@@ -143,5 +153,5 @@ class Parameters:
     
     def read_all(self):
         for p in self.all_parameters:
-            p.read_all(self.protocol_handler)
+            p.read_all()
 

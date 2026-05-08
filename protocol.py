@@ -73,6 +73,19 @@ class Protocol:
         #print(f'Parameter Data {data_received}')
         return data_received
 
+    def put_param(self, motor_mask, param_code, param_value):
+        param_bytes = param_value.to_bytes(4, byteorder='little')
+        cmd_data = [motor_mask, param_code]
+        cmd_data = cmd_data + list(param_bytes)
+        cmd = self.makecmd('P', cmd_data)
+        self.ser_handle.write(cmd.encode('utf-8'))
+        resp=""
+        resp = self.ser_handle.readline()
+        resp=resp.decode('utf-8')
+        #print(f"Data RX: {resp}")
+        data_received = self.check_rsp(resp)
+        #print(f'Parameter Data {data_received}')
+
     def execute_cmd(self, motor_mask, command_code,direction=None, speed_steps_p_sec=None):
         cmd_data = [motor_mask]
         if direction is not None:
